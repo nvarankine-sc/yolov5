@@ -79,6 +79,82 @@ class Annotator:
         else:  # use cv2
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
+        # camera point, evaluated
+        from models.Projector import Projector
+        cam = [-1.39 - 1.52 - 4.5 - 0.5 - 3., +4.5 + 0.5, 3.6]  # TODO re-check!!!
+        self.model = Projector(cam)
+        mfile = 'C:\\Users\\varankine\\Projects\\IP Camera\\Projects\\affine-transforms\\projection.mdl'
+        self.model.load_state_dict(torch.load(mfile))
+        # zone of monitoring
+        zx: float = (2.500 + 1.520 + 2.780 + 1.520 + 2.500) / 2
+        zy: float = (9.000) / 2
+        self.zone = torch.tensor([
+            [+zx, +zy, 0.0],  # TR
+            [-zx, +zy, 0.0],  # BR
+            [-zx, -zy, 0.0],  # BL
+            [+zx, -zy, 0.0],  # TL
+            [+zx, 0.0, 0.0],  # TX
+            [-zx, 0.0, 0.0],  # BX
+            [0.0, -zy, 0.0],  # LY
+            [0.0, +zy, 0.0],  # RY
+            [0.0, 0.0, 0.0],  # C
+        ], dtype=torch.float)
+        self.zv = []
+        for i in range(9):
+            self.zv.append(self.model.view(self.zone[i,], torch.tensor([0.0, 0.0, 0.0], dtype=torch.float)).round().type(torch.int).numpy())
+
+    def grid_zone(self):
+        if self.pil: # or not is_ascii(label):
+            self.draw.line((self.zv[0][:2],self.zv[1][:2]), fill=(255, 0, 0), width=1)
+            # TODO
+        else:
+            cv2.line(self.im, self.zv[0][:2], self.zv[1][:2], (0, 0, 255), 1)  # BGR
+            cv2.line(self.im, self.zv[1][:2], self.zv[2][:2], (0, 0, 255), 1)  # BGR
+            cv2.line(self.im, self.zv[2][:2], self.zv[3][:2], (0, 0, 255), 1)  # BGR
+            cv2.line(self.im, self.zv[3][:2], self.zv[0][:2], (0, 0, 255), 1)  # BGR
+            cv2.line(self.im, self.zv[4][:2], self.zv[5][:2], (0, 0, 255), 1)  # BGR
+            cv2.line(self.im, self.zv[6][:2], self.zv[7][:2], (0, 0, 255), 1)  # BGR
+
+    def box_3d(self, pos: torch.Tensor):
+        pos = pos.sub(torch.tensor([0, 0, pos[2].item()], dtype=torch.float))
+        cm = \
+        [
+            pos.add(torch.tensor([+2.2, +0.9, 1.7], dtype=torch.float)),
+            pos.add(torch.tensor([+2.2, +0.9, 0.0], dtype=torch.float)),
+            pos.add(torch.tensor([-2.2, +0.9, 0.0], dtype=torch.float)),
+            pos.add(torch.tensor([-2.2, +0.9, 1.7], dtype=torch.float)),
+            pos.add(torch.tensor([+2.2, -0.9, 1.7], dtype=torch.float)),
+            pos.add(torch.tensor([+2.2, -0.9, 0.0], dtype=torch.float)),
+            pos.add(torch.tensor([-2.2, -0.9, 0.0], dtype=torch.float)),
+            pos.add(torch.tensor([-2.2, -0.9, 1.7], dtype=torch.float)),
+        ]
+        cmv = []
+        for cm_ in cm:
+            cmv.append(self.model.view(cm_, torch.tensor([0, 0, 0], dtype=torch.float)).round().to(torch.int).numpy())
+        if self.pil: # or not is_ascii(label):
+            self.draw.line((self.zv[0][:2],self.zv[1][:2]), fill=(255, 0, 0), width=1)
+            # TODO
+        else:
+            # right side
+            cv2.line(self.im, cmv[0][:2], cmv[1][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[1][:2], cmv[2][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[2][:2], cmv[3][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[3][:2], cmv[0][:2], (255, 0, 0), 1)  # BGR
+            # left side
+            cv2.line(self.im, cmv[4][:2], cmv[5][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[5][:2], cmv[6][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[6][:2], cmv[7][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[7][:2], cmv[4][:2], (255, 0, 0), 1)  # BGR
+            # front
+            cv2.line(self.im, cmv[0][:2], cmv[1][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[1][:2], cmv[5][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[5][:2], cmv[4][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[4][:2], cmv[0][:2], (255, 0, 0), 1)  # BGR
+            # back
+            cv2.line(self.im, cmv[2][:2], cmv[3][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[3][:2], cmv[7][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[7][:2], cmv[6][:2], (255, 0, 0), 1)  # BGR
+            cv2.line(self.im, cmv[6][:2], cmv[2][:2], (255, 0, 0), 1)  # BGR
 
     def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
         # Add one xyxy box to image with label
@@ -102,7 +178,26 @@ class Annotator:
                 w, h = cv2.getTextSize(label, 0, fontScale=self.lw / 3, thickness=tf)[0]  # text width, height
                 outside = p1[1] - h >= 3
                 p2 = p1[0] + w, p1[1] - h - 3 if outside else p1[1] + h + 3
-                cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
+                if label.startswith('car ') or label.startswith('truck '):
+                    pc = (int(np.mean([int(box[0]), int(box[2])])), int(np.mean([int(box[1]), int(box[3])])))
+                    th = .85 if label.startswith('car ') else 1.6 if label.startswith('truck ') else 0.
+                    pos = self.model.scene(torch.tensor([pc[0],pc[1],0], dtype=torch.float), torch.tensor([0, 0, th], dtype=torch.float))
+                    # TODO unreal form self.box_3d(pos)
+                    ox = pos[0].item()
+                    oy = pos[1].item()
+                    ox_min = self.zone[1, 0].item() - 2.5
+                    ox_max = self.zone[0, 0].item() + 2.5
+                    oy_min = self.zone[2, 1].item() - 1.5
+                    oy_max = self.zone[1, 1].item() + 1.5
+                    in_zone = ox_min <= ox <= ox_max and \
+                              oy_min <= oy <= oy_max
+                    # dbs = 10
+                    # pc1, pc2 = (pc[0] - dbs, pc[1] - dbs), (pc[0] + dbs, pc[1] + dbs)
+                    # cv2.rectangle(self.im, pc1, pc2, (0,0,255) if in_zone else color, thickness=self.lw + 2, lineType=cv2.LINE_AA)
+                    label += f' X={ox :.2f} Y={oy :.2f}'
+                    cv2.rectangle(self.im, p1, p2, (0,0,255) if in_zone else color, -1, cv2.LINE_AA)  # filled
+                else:
+                    cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
                 cv2.putText(self.im,
                             label, (p1[0], p1[1] - 2 if outside else p1[1] + h + 2),
                             0,
@@ -216,6 +311,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
     # Annotate
     fs = int((h + w) * ns * 0.01)  # font size
     annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True, example=names)
+    annotator.zone()
     for i in range(i + 1):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
